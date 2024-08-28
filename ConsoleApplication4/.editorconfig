@@ -1,0 +1,36 @@
+class Object{
+	int x;
+	int y;
+
+	Object(){
+		
+	}
+	
+	virtual void foo(){
+		
+	}
+	
+	
+};
+
+class Object2 : Object{
+	foo(){
+		
+	}
+}
+
+
+int main{}{
+	Object x;
+	x.foo();
+	{
+		int y = 5;
+	}
+	
+	int* x = &y;
+	Object x = malloc(50*sizeof(Object));
+	
+	
+	
+	delete Object();
+}
