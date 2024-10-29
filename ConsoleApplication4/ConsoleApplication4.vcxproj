@@ -129,6 +129,8 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="PokerGame.cpp" />
+    <ClCompile Include="UserInput.cpp" />
+    <ClCompile Include="UserInput.h" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="PokerGame.h" />

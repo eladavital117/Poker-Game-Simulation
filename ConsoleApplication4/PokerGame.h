@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <thread>
 #include <mutex>
+#include <ctime>
 
 class PokerGame{
 public:
@@ -17,7 +18,7 @@ public:
     * @param[in] game_count the amount of games simulate
     * @param[in] thread_count the amount of threads to use
     */
-    PokerGame(const int hand1[][2], const int hand2[][2], const int game_count, const int thread_count);
+    PokerGame(const int hands[][2][2], const int game_count, const int thread_count, const int hand_amount);
 
     /**
     * prints an array of cards (ex: {{2,1},{2,2}} outputs 2♥, 2♦)
@@ -28,9 +29,8 @@ public:
     void print(const int cards[][2], const int size);
 
 private:
-    double hand1_wins = 0;
-    double hand2_wins = 0;
-    double draw = 0;
+    double hand_wins[8] = { 0 };
+    double hand_splits[8] = { 0 };
     std::mutex mtx;
 
     int deck[52][2] = {
@@ -40,13 +40,14 @@ private:
     {2, 3}, {3, 3}, {4, 3}, {5, 3}, {6, 3}, {7, 3}, {8, 3}, {9, 3}, {10, 3}, {11, 3}, {12, 3}, {13, 3}, {14, 3}
     };
 
-    void run_hands(const int h1[][2], const int h2[][2], const int start, const int end);
-    void create_threads(int threadCount, int totalCalls, const int h1[][2], const int h2[][2]);
-    int compare_score(double h1[], double h2[]);
-    void remove_player_cards_from_deck(const int h1[][2], const int h2[][2]);
+    void run_hands(const int hands[][2][2], const int start, const int end, const int hand_amount);
+    void create_threads(int threadCount, int totalCalls, const int hands[][2][2], const int hand_amount);
+    void sort_scores(double scores[][3], int n);
+    void compare_score(double hand_scores[8][3], int comparison_result[8]);
+    void remove_player_cards_from_deck(const int hands[][2][2]);
 
     // generates random 5 cards for the current game
-    void generate(int hand1[][2], int hand2[][2]);
+    void generate(int hands[][7][2]);
 
     void possible_hands(const int cards[][2], double hand_score[]);
     void sort(int ranks[], int suits[], int n);

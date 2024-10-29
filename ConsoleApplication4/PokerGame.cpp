@@ -1,67 +1,70 @@
 #include "PokerGame.h"
 
-PokerGame::PokerGame(const int hand1[][2], const int hand2[][2], const int game_count, const int thread_count) {
-    std::cout << "hand1: \n";
-    print(hand1, 2);
-    std::cout << "hand2: \n";
-    print(hand2, 2);
-    remove_player_cards_from_deck(hand1, hand2);
-    create_threads(thread_count, game_count, hand1, hand2);
-    hand1_wins /= game_count;
-    hand2_wins /= game_count;
-    draw /= game_count;
-    std::cout << "\nhand 1 win: " << hand1_wins * 100 << "%\nhand 2 win: " << hand2_wins * 100 << "%\ndraw: " << draw * 100 << "%\n\n";
+PokerGame::PokerGame(const int hands[][2][2], const int game_count, const int thread_count, const int hand_amount) {
+    for (int i = 0; i < hand_amount; i++) {
+        std::cout << "hand " << i + 1 << ": \n";
+        print(hands[i], 2);
+    }
+    remove_player_cards_from_deck(hands);
+    create_threads(thread_count, game_count, hands, hand_amount);
+    for (int i = 0; i < hand_amount; i++) {
+        
+        hand_wins[i] /= game_count;
+        hand_splits[i] /= game_count;
+        std::cout << "hand " << i + 1 << " wins: " << hand_wins[i]*100 << "% splits: " << hand_splits[i]*100 << "%\n";
+    }
 }
 
-void PokerGame::run_hands(const int h1[][2], const int h2[][2], const int start, const int end) {
-    int hand1_wins_thread = 0;
-    int hand2_wins_thread = 0;
-    int draw_thread = 0;
-    int hand1[7][2];
-    int hand2[7][2];
-    double hand1_score[2];
-    double hand2_score[2];
-    int comparison_result = 0;
-
-    hand1[0][0] = h1[0][0];
-    hand1[0][1] = h1[0][1];
-
-    hand1[1][0] = h1[1][0];
-    hand1[1][1] = h1[1][1];
-
-    hand2[0][0] = h2[0][0];
-    hand2[0][1] = h2[0][1];
-
-    hand2[1][0] = h2[1][0];
-    hand2[1][1] = h2[1][1];  
-
-    for (int i = start; i < end; i++) {
-        generate(hand1, hand2);
-        possible_hands(hand1, hand1_score);
-        possible_hands(hand2, hand2_score);
-
-        comparison_result = compare_score(hand1_score, hand2_score);
-
-        if (comparison_result == 0) {
-            draw_thread++;
-        }
-        else if (comparison_result == 1) {
-            hand1_wins_thread++;
-        }
-        else {
-            hand2_wins_thread++;
-        }
+void PokerGame::run_hands(const int hands[][2][2], const int start, const int end, const int hand_amount) {
+    
+    int hand_wins_thread[8] = { 0 };
+    int hand_splits_thread[8] = { 0 };
+    int hands_with_space_for_community_cards[8][7][2] = {0};
+    double hands_scores[8][3];
+    
+    for (int i = 0; i < 8; i++) {
+        hands_scores[i][2] = i;
     }
+
+    for (int i = 0; i < hand_amount; i++) {
+        hands_with_space_for_community_cards[i][0][0] = hands[i][0][0];
+        hands_with_space_for_community_cards[i][0][1] = hands[i][0][1];
+
+        hands_with_space_for_community_cards[i][1][0] = hands[i][1][0];
+        hands_with_space_for_community_cards[i][1][1] = hands[i][1][1];
+    }
+    for (int i = start; i < end; i++) {
+        int comparison_result[8] = { 0 };
+        generate(hands_with_space_for_community_cards);
+        for (int j = 0; j < hand_amount; j++) {
+            possible_hands(hands_with_space_for_community_cards[j], hands_scores[j]);
+        }
+        compare_score(hands_scores, comparison_result);
+
+        for (int j = 0; j < hand_amount; j++) {
+            if (comparison_result[j] == 1) {
+                hand_wins_thread[j]++;
+            }
+            if (comparison_result[j] == 2) {
+                hand_splits_thread[j]++;
+            }
+            
+        } 
+    }
+    
     {
         std::lock_guard<std::mutex> lock(mtx);
-        hand1_wins += hand1_wins_thread;
-        hand2_wins += hand2_wins_thread;
-        draw += draw_thread;
+        for (int j = 0; j < hand_amount; j++) {
+            hand_wins[j] += hand_wins_thread[j];
+            hand_splits[j] += hand_splits_thread[j];
+        }
     }
+    
 }
 
+
 // splits the workload to different threads
-void PokerGame::create_threads(int thread_count, int total_calls, const int h1[][2], const int h2[][2]) {
+void PokerGame::create_threads(int thread_count, int total_calls, const int hands[][2][2], const int hand_amount) {
     std::vector<std::thread> threads;
     int calls_per_thread = total_calls / thread_count;
     int remainder = total_calls % thread_count;
@@ -69,7 +72,7 @@ void PokerGame::create_threads(int thread_count, int total_calls, const int h1[]
 
     for (int i = 0; i < thread_count; i++) {
         const int end = start + calls_per_thread + (i < remainder ? 1 : 0);
-        threads.emplace_back(&PokerGame::run_hands, this, h1, h2, start, end);
+        threads.emplace_back(&PokerGame::run_hands, this, hands, start, end, hand_amount);
     }
 
     for (auto& t : threads) {
@@ -77,29 +80,64 @@ void PokerGame::create_threads(int thread_count, int total_calls, const int h1[]
     }
 }
 
-int PokerGame::compare_score(double h1[], double h2[]) {
-    if ((h1[0] > h2[0]) || (h1[0] == h2[0] && h1[1] > h2[1])) {
-        return 1;
+void PokerGame::sort_scores(double scores[][3], int n) {
+    for (int i = 0; i < 8; i++) {
+        scores[i][2] = i;
     }
-    else if ((h2[0] > h1[0]) || (h2[0] == h1[0] && h2[1] > h1[1])) {
-        return 2;
-    }
-    else {
-        return 0;
+    for (int i = n - 1; i >= 0; i--) {
+        for (int j = 0; j < i; j++) {
+            if (scores[j + 1][0] > scores[j][0] ||
+                (scores[j+1][0] == scores[j][0] && scores[j+1][1] > scores[j][1])) {
+                double temp1 = scores[j][0];
+                double temp2 = scores[j][1];
+                double temp3 = scores[j][2];
+                scores[j][0] = scores[j + 1][0];
+                scores[j][1] = scores[j + 1][1];
+                scores[j][2] = scores[j + 1][2];
+                scores[j + 1][0] = temp1;
+                scores[j + 1][1] = temp2;
+                scores[j + 1][2] = temp3;
+            }
+        }
     }
 }
 
+void PokerGame::compare_score(double hand_scores[8][3], int comparison_result[8]) {
+    sort_scores(hand_scores, 8);
+
+    for (int i = 0; i < 8; i++) {
+        if (hand_scores[i][0] == hand_scores[i + 1][0] &&
+            hand_scores[i][1] == hand_scores[i + 1][1]) {
+            comparison_result[(int)hand_scores[i][2]] = 2;
+            comparison_result[(int)hand_scores[i + 1][2]] = 2;
+        }
+        else {
+            comparison_result[(int)hand_scores[i][2]] = 1;
+            break;
+        }
+    }
+}
 // remove the cards of the players from the deck
-void PokerGame::remove_player_cards_from_deck(const int h1[][2], const int h2[][2]) {
-    int cards_to_remove[4][2] = {
-        {h1[0][0], h1[0][1]},
-        {h1[1][0], h1[1][1]},
-        {h2[0][0], h2[0][1]},
-        {h2[1][0], h2[1][1]}
-    };
+
+void PokerGame::remove_player_cards_from_deck(const int hands[][2][2]) {
+    int cards_to_remove[16][2] = {};
+    int hand_count = 0;
+    int k = 0;
+    for (int i = 0; i < 8; i++) {
+        if (hands[i][0][0] == 0) {
+            break;
+        }
+        hand_count++;
+        cards_to_remove[k][0] = hands[i][0][0];
+        cards_to_remove[k][1] = hands[i][0][1];
+        k++;
+        cards_to_remove[k][0] = hands[i][1][0];
+        cards_to_remove[k][1] = hands[i][1][1];
+        k++;
+    }
 
     for (int i = 0; i < 52; i++) {
-        for (int j = 0; j < 4; j++) {
+        for (int j = 0; j < hand_count*2; j++) {
             if (deck[i][0] == cards_to_remove[j][0] && deck[i][1] == cards_to_remove[j][1]) {
                 deck[i][0] = -1;
                 deck[i][1] = -1;
@@ -108,8 +146,9 @@ void PokerGame::remove_player_cards_from_deck(const int h1[][2], const int h2[][
     }
 }
 
-// generates 5 random cards
-void PokerGame::generate(int hand1[][2], int hand2[][2]) {
+// fix generate function!!!
+// generates 5 random cards and adds them to each hand
+void PokerGame::generate(int hands[][7][2]) {
     int indexes[5] = { -1,-1,-1,-1,-1 };
     int i = 2;
     int rnd;
@@ -122,11 +161,14 @@ void PokerGame::generate(int hand1[][2], int hand2[][2]) {
             for (int j = 0; j < 5; j++) {
                 if (indexes[j] == rnd) {
                     already_exists = true;
+                    break;
                 }
             }
             if (!already_exists) {
-                hand1[i][0] = hand2[i][0] = deck[rnd][0];
-                hand1[i][1] = hand2[i][1] = deck[rnd][1];
+                for (int h = 0; h < 8; h++) {
+                    hands[h][i][0] = deck[rnd][0];
+                    hands[h][i][1] = deck[rnd][1];
+                }
                 indexes[i - 2] = rnd;
                 i++;
             }
@@ -159,6 +201,7 @@ void PokerGame::print(const int cards[][2], const int size) {
     result += "\n";
     std::cout << result;
 }
+
 
 //generate all possible 5 card hands from 7 cards, returns the score of the best hand
 void PokerGame::possible_hands(const int cards[][2], double hand_score[]) {
@@ -407,4 +450,6 @@ void PokerGame::eval_hand(const int hand[][2], double hand_score[]) {
     result[1] = ranks[0];
     hand_score[0] = result[0];
     hand_score[1] = result[1];
+
 }
+
